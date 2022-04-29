@@ -7,7 +7,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from main_files.create_bot import bot
 from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.notifications_kb import add_notif_kb, edit_kb, acception_kb
-from keyboards.first_lvl.main_kb import main_kb
+import schedule
 from aiogram.types import CallbackQuery
 from datetime import datetime
 
@@ -125,7 +125,7 @@ async def accept_yes(callback_query: CallbackQuery):  # добавить сюд�
         cursor = connect.cursor()
         cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
             callback_query.from_user.id, Notifications.date_text, Notifications.record_text, 1, Notifications.time_text))
-
+        await bot.send_message()
         print('==========================')
         check_2 = cursor.execute('SELECT * FROM diary_db WHERE user=?', (callback_query.from_user.id,))
         for item in check_2:

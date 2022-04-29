@@ -9,7 +9,9 @@ from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.doings_kb import acception_kb, add_doings_kb, edit_kb, change_kb, add_time_kb
 from keyboards.first_lvl.main_kb import main_kb
 from aiogram.types import CallbackQuery
-from datetime import datetime
+from datetime import datetime, timedelta
+import asyncio
+import aioschedule
 
 
 class Doings(StatesGroup):
@@ -246,7 +248,7 @@ async def got_new_record(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-def send_morning_msg():
+async def send_morning_msg():
     date = datetime.today().date().strftime('%d.%m.%Y')
     print("date = ", date)
     connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
@@ -254,9 +256,38 @@ def send_morning_msg():
     cursor.execute('SELECT * FROM diary_db WHERE date=?', (date,))
     records = cursor.fetchall()
 
+    i = 1
     if records:
         for row in records:
-            Doings.mornings_doings_text += f'{row[2]}. \n'
+            if row[4]:
+                Doings.mornings_doings_text += f'{i}. {row[2]} {row[1]} {row[4]}. \n'
+            else:
+                Doings.mornings_doings_text += f'{i}. {row[2]} {row[1]}. \n'
+            i += 1
+        await bot.send_message(records[0][0], f'Привет! На сегодня у тебя запланировано: \n'
+                                              f'{Doings.mornings_doings_text}')
+    cursor.close()
+
+
+async def scheduler():
+    aioschedule.every().day.at("08:30").do(send_morning_msg)
+    aioschedule.every().day.at('00:01').do(clean_db)
+    while True:
+        await aioschedule.run_pending()
+        await asyncio.sleep(1)
+
+
+def clean_db():
+    date = datetime.today().date() - timedelta(days=1)
+
+    connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
+    cursor = connect.cursor()
+    cursor.execute('SELECT * FROM diary_db WHERE date=?', (date,))
+    records = cursor.fetchall()
+    if records:
+        cursor.execute('DELETE * FROM diary_db WHERE date=?', (date,))
+    connect.commit()
+    cursor.close()
 
 
 def doings_handlers_registration(dp):
