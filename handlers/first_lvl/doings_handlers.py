@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery
 from datetime import datetime, timedelta
 import asyncio
 import aioschedule
+from aiogram.dispatcher.filters import Text
 
 
 class Doings(StatesGroup):
@@ -24,6 +25,8 @@ class Doings(StatesGroup):
     edit_record = State()
 
     send_mrng_msg = State()
+
+    first_pg = State()
 
     mornings_doings_text = ''
 
@@ -42,8 +45,13 @@ async def list_of_doings(message: types.Message):
     cursor.execute('SELECT * FROM diary_db WHERE user=?', (message.from_user.id,))
     records = cursor.fetchall()
 
-    for item in records:
-        print("item = ", item)
+    text = ''
+    text_2 = '              \n' \
+             'Бессрочные дела:\n' \
+             '                \n'
+    i = 1
+    k = 1
+    endless = bool()
 
     if not records:
         await message.answer('У вас нет запланированных дел.')
@@ -51,12 +59,20 @@ async def list_of_doings(message: types.Message):
     else:
         await message.answer('Вот ваши дела: ')
         for row in records:
-            if row[4] == 0:
-                await message.answer(f'Название дела: {row[2]}\n'
-                                     f'Дата выполнения: {row[1]}', reply_markup=edit_kb)
-            else:
-                await message.answer(f'Название дела: {row[2]}\n'
-                                     f'Дата выполнения: {row[1]} {row[4]}', reply_markup=edit_kb)
+            if row[1] != 'Бессрочно':
+                if row[4] == 0:  # если время не указано
+                    text += f'{i}. {row[2]} - {row[1]}\n'
+                else:
+                    text += f'{i}. {row[2]} - {row[1]} {row[4]}\n'
+                i += 1
+            if row[1] == 'Бессрочно':
+                endless = True
+                text_2 += f'{k}. {row[2]}\n'
+                k += 1
+        if endless:
+            await message.answer(text + text_2, reply_markup=edit_kb)
+        else:
+            await message.answer(text, reply_markup=edit_kb)
     cursor.close()
 
 
@@ -83,9 +99,17 @@ async def dont_make_record(callback_query: CallbackQuery):
 # @dp.message_handler(state = Doings.record)
 async def get_date(message: types.Message):
     Doings.record_text = message.text
-    await message.answer('Выберите дату, когда Вам нужно сделать дело: ',
+    await message.answer('Выберите дату, когда Вам нужно сделать дело (если это бессрочно, '
+                         'просто напишите мне "бессрочно"): ',
                          reply_markup=await SimpleCalendar().start_calendar())
     await Doings.date.set()
+
+
+# @dp.message_handler(lambda message: 'бессрочно' in message.text)
+async def endless_doings(message: types.Message, state: FSMContext):
+    Doings.date_text = 'Бессрочно'
+    await message.answer(f'Вы выбрали: {Doings.date_text}')
+    await acception(message, state)
 
 
 # @dp.callback_query_handler(simple_cal_callback.filter())
@@ -192,16 +216,15 @@ async def accept_yes(callback_query: CallbackQuery):
         await MainStates.first_pg.set()
         connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
         cursor = connect.cursor()
-        if Doings.time_text:
+        if Doings.date_text == 'Бессрочно':
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
-                callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, Doings.time_text))
-        else:
+                callback_query.from_user.id, 'Бессрочно', Doings.record_text, 0, 0))
+        elif Doings.date_text != 'Бессрочно' and not Doings.time_text:
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
                 callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, 0))
-        print('==========================')
-        check_2 = cursor.execute('SELECT * FROM diary_db WHERE user=?', (callback_query.from_user.id,))
-        for item in check_2:
-            print(item)
+        elif Doings.date_text != 'Бессрочно' and Doings.time_text:
+            cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
+                callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, Doings.time_text))
         connect.commit()
         cursor.close()
 
@@ -271,7 +294,7 @@ async def send_morning_msg():
 
 async def scheduler():
     aioschedule.every().day.at("08:30").do(send_morning_msg)
-    aioschedule.every().day.at('00:01').do(clean_db)
+    aioschedule.every().day.at('17:53').do(clean_db)
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)
@@ -280,11 +303,13 @@ async def scheduler():
 def clean_db():
     date = datetime.today().date() - timedelta(days=1)
 
+    print('delete')
+
     connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
     cursor = connect.cursor()
     cursor.execute('SELECT * FROM diary_db WHERE date=?', (date,))
     records = cursor.fetchall()
-    if records:
+    if records:  # сделать проверку на время чтобы по истечении времени удалялось (время должно постоянно проверяться)
         cursor.execute('DELETE * FROM diary_db WHERE date=?', (date,))
     connect.commit()
     cursor.close()
@@ -297,6 +322,8 @@ def doings_handlers_registration(dp):
     dp.register_message_handler(add_new_doing, lambda message: 'Добавить дело' in message.text, state='*')
 
     dp.register_message_handler(del_doing, state=Doings.number_doing)
+
+    dp.register_message_handler(endless_doings, Text(equals='бессрочно', ignore_case=True), state=Doings.date)
 
     dp.register_message_handler(get_time, state=Doings.time)
     dp.register_callback_query_handler(add_time, text='add_time', state="*")
@@ -317,4 +344,4 @@ def doings_handlers_registration(dp):
     dp.register_callback_query_handler(change_time, text='time', state="*")
     dp.register_callback_query_handler(change_record, text='doing', state="*")
 
-    dp.register_callback_query_handler(process_simple_calendar, simple_cal_callback.filter(), state="*")
+    dp.register_callback_query_handler(process_simple_calendar, simple_cal_callback.filter(), state=Doings.date)

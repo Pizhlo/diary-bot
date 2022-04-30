@@ -18,6 +18,8 @@ class Notifications(StatesGroup):
     time = State()
     number_doing = State()
 
+    first_pg = State()
+
     edit_date = State()
     edit_record = State()
 
@@ -32,6 +34,8 @@ class Notifications(StatesGroup):
 async def list_of_notif(message: types.Message):
     connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
     cursor = connect.cursor()
+
+    await Notifications.first_pg.set()
 
     cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
     records = cursor.fetchall()
@@ -83,9 +87,10 @@ async def dont_make_record(callback_query: CallbackQuery):
 
 
 # @dp.callback_query_handler(simple_cal_callback.filter())
-async def notif_calender(callback_query: CallbackQuery, callback_data: dict, state: FSMContext):
+async def notif_calender(callback_query: CallbackQuery, callback_data: dict):
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     await bot.answer_callback_query(callback_query.id)
+    print("notif")
     if selected:
         if date < datetime.today():
             await callback_query.message.answer(
@@ -124,8 +129,8 @@ async def accept_yes(callback_query: CallbackQuery):  # добавить сюд�
         connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
         cursor = connect.cursor()
         cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
-            callback_query.from_user.id, Notifications.date_text, Notifications.record_text, 1, Notifications.time_text))
-        await bot.send_message()
+            callback_query.from_user.id, Notifications.date_text, Notifications.record_text, 1,
+            Notifications.time_text))
         print('==========================')
         check_2 = cursor.execute('SELECT * FROM diary_db WHERE user=?', (callback_query.from_user.id,))
         for item in check_2:
@@ -154,4 +159,4 @@ def notif_handlers_registration(dp):
     dp.register_callback_query_handler(make_record, text='make_notif', state="*")
     dp.register_callback_query_handler(dont_make_record, text='dont_make_notif', state="*")
 
-    dp.register_callback_query_handler(notif_calender, simple_cal_callback.filter(), state="*")
+    dp.register_callback_query_handler(notif_calender, simple_cal_callback.filter(), state=Notifications.date)
