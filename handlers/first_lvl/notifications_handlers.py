@@ -32,7 +32,7 @@ class Notifications(StatesGroup):
 
 # @dp.message_handler(lambda message: 'Список напоминаний' in message.text)
 async def list_of_notif(message: types.Message):
-    connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
+    connect = sqlite3.connect('..\\db\\main_db.db')
     cursor = connect.cursor()
 
     await Notifications.first_pg.set()
@@ -126,7 +126,7 @@ async def accept_yes(callback_query: CallbackQuery):  # добавить сюд�
         await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
         await callback_query.message.answer(emoji.emojize(':check_mark_button: Отлично! Дело записано!'))
         await MainStates.first_pg.set()
-        connect = sqlite3.connect('C:\\Users\\1\\Desktop\\diary-bot\\db\\main_db.db')
+        connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
         cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
             callback_query.from_user.id, Notifications.date_text, Notifications.record_text, 1,
