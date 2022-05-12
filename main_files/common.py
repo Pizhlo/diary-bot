@@ -37,6 +37,7 @@ class Doings(StatesGroup):
     time_text = ''
 
     doings_dict = dict()
+    endless_doings_dict = dict()
 
 
 async def error(message: types.Message, e):
@@ -44,6 +45,7 @@ async def error(message: types.Message, e):
     await message.answer(
         emoji.emojize(':warning: Произошла какая-то ошибка. Подробности узнавайте у владельца бота!'),
         reply_markup=main_kb)
+    await MainStates.first_pg.set()
     await bot.send_message(chat_id='297850814', text=
     emoji.emojize(
         f':warning: В чате с пользователем @{temp_text} произошла '

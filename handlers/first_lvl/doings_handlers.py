@@ -8,9 +8,11 @@ from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.doings_kb import acception_kb, add_doings_kb, edit_kb, change_kb, add_time_kb
 from keyboards.first_lvl.main_kb import main_kb
 from aiogram.types import CallbackQuery
-from datetime import datetime, date
+from datetime import datetime
+from aiogram.utils.markdown import text, bold
 from aiogram.dispatcher.filters import Text
 from db.clean_database import delete_doings_with_time
+from aiogram.types import ParseMode
 
 
 # @dp.message_handler(lambda message: 'Список дел' in message.text)
@@ -21,30 +23,12 @@ async def list_of_doings(message: types.Message):
     cursor.execute('SELECT * FROM diary_db WHERE user=?', (message.from_user.id,))
     records = cursor.fetchall()
 
-    text = ''
-    text_2 = '              \n' \
-             'Бессрочные дела:\n' \
-             '                \n'
-    i = 1
-    k = 1
-    endless = bool()
-
     if not records:
         await message.answer('У вас нет запланированных дел.')
         await message.answer('Хотите добавить дело?', reply_markup=add_doings_kb)
     else:
         await message.answer('Вот ваши дела: ')
-        for row in records:
-            if row[1] != 'Бессрочно':
-                if row[4] == 0:  # если время не указано
-                    text += f'{i}. {row[2]} - {row[1]}\n'
-                else:
-                    text += f'{i}. {row[2]} - {row[1]} {row[4]}\n'
-                i += 1
-            if row[1] == 'Бессрочно':
-                endless = True
-                text_2 += f'{k}. {row[2]}\n'
-                k += 1
+        endless, text, text_2 = make_text(records)
         if endless:
             await message.answer(text + text_2, reply_markup=edit_kb)
         else:
@@ -75,11 +59,11 @@ async def dont_make_record(callback_query: CallbackQuery):
 # @dp.message_handler(state = Doings.record)
 async def get_date(message: types.Message):
     Doings.record_text = message.text
-    # await message.answer('Выберите дату, когда Вам нужно сделать дело (если это бессрочно, '
-    # 'просто напишите мне "бессрочно"): ',
-    # reply_markup=await SimpleCalendar().start_calendar())
     await message.answer('Выберите дату, когда Вам нужно сделать дело (если это бессрочно, '
-                         'просто напишите мне "бессрочно"):')
+                         'просто напишите мне "бессрочно", если сегодня - напишите "сегодня"): ',
+                         reply_markup=await SimpleCalendar().start_calendar())
+    # await message.answer('Выберите дату, когда Вам нужно сделать дело (если это бессрочно, '
+    # 'просто напишите мне "бессрочно"):')
     await Doings.date.set()
 
 
@@ -90,11 +74,18 @@ async def date_without_calendar(message: types.Message):
     await message.answer('Хотите добавить время?', reply_markup=add_time_kb)
 
 
-# @dp.message_handler(lambda message: 'бессрочно' in message.text)
+# @dp.message_handler(Text(equals='бессрочно', ignore_case=True))
 async def endless_doings(message: types.Message, state: FSMContext):
     Doings.date_text = 'Бессрочно'
     await message.answer(f'Вы выбрали: {Doings.date_text}')
     await acception(message, state)
+
+
+# @dp.message_handler(Text(equals='сегодня', ignore_case=True))
+async def today_doings(message: types.Message, state: FSMContext):
+    Doings.date_text = datetime.today().date().strftime('%d.%m.%Y')
+    await message.answer(f'Вы выбрали: {Doings.date_text}')
+    await message.answer('Хотите добавить время?', reply_markup=add_time_kb)
 
 
 # @dp.callback_query_handler(simple_cal_callback.filter())
@@ -150,19 +141,14 @@ async def acception(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-# @dp.message_handler(lambda message: 'Удалить' in message.text, state="*")
-async def choose_doings(message: types.Message):
-    connect = sqlite3.connect('..\\db\\main_db.db')
-    cursor = connect.cursor()
-    cursor.execute('SELECT * FROM diary_db WHERE user=?', (message.from_user.id,))
-    records = cursor.fetchall()
-    await message.answer('Выберите, какое дело хотите удалить (отправьте цифру)')
-
-    text = str()
-    text_2 = str()
-    i = 0
-    k = 0
-    endless = bool()
+def make_text(records):
+    text = ''
+    text_2 = '              \n' \
+             'Бессрочные дела:\n' \
+             '                \n'
+    i = 1
+    k = 1
+    endless = False
 
     for row in records:
         if row[1] != 'Бессрочно':
@@ -175,28 +161,82 @@ async def choose_doings(message: types.Message):
             endless = True
             text_2 += f'{k}. {row[2]}\n'
             k += 1
-    if endless:
-        await message.answer(text + text_2, reply_markup=edit_kb)
-    else:
-        await message.answer(text, reply_markup=edit_kb)
-    await message.answer(text)
-    await Doings.number_doing.set()
-    connect.close()
+    return endless, text, text_2
+
+
+# @dp.message_handler(lambda message: 'Удалить' in message.text, state="*")
+async def choose_doings(message: types.Message):
+    try:
+        connect = sqlite3.connect('..\\db\\main_db.db')
+        cursor = connect.cursor()
+        cursor.execute('SELECT * FROM diary_db WHERE user=?', (message.from_user.id,))
+        records = cursor.fetchall()
+        await message.answer(
+            'Выберите, какое дело хотите удалить (отправьте список цифр). Если вы хотите удалить запись из списка '
+            'бессрочных дел, '
+            'сообщение должно содержать слово "бессрочно"')
+
+        i = 1
+        k = 1
+
+        for row in records:
+            if row[1] != 'Бессрочно':
+                Doings.doings_dict[i] = row[2]
+                i += 1
+            else:
+                Doings.endless_doings_dict[k] = row[2]
+                k += 1
+
+        endless, text, text_2 = make_text(records)
+
+        if endless:
+            await message.answer(text + text_2, reply_markup=edit_kb)
+        else:
+            await message.answer(text, reply_markup=edit_kb)
+        await Doings.number_doing.set()
+        connect.close()
+
+    except Exception as e:
+
+        await error(message, e)
 
 
 # @dp.message_handler(state=number_doing)
 async def del_doing(message: types.Message):  # когда пользователь хочет вручную удалить дело
     try:
-        number = int(message.text)
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
-        cursor.execute('DELETE FROM diary_db WHERE record=?', (Doings.doings_dict[number],))
+
+        if 'бессрочно' not in message.text:
+            if ',' not in message.text:
+                number_list = message.text.split()
+            else:
+                number_list = message.text.split(',')
+            print(number_list)
+            for number in number_list:
+                cursor.execute('DELETE FROM diary_db WHERE record=?', (Doings.doings_dict[int(number)],))
+                await message.answer(
+                    emoji.emojize(
+                        f':check_mark_button: Дело {text(bold(Doings.endless_doings_dict[int(number)]))} было успешно удалено!'),
+                    reply_markup=main_kb)
+        else:
+            new_msg = message.text.replace('бессрочно', '')
+            if ',' not in message.text:
+                number_list = new_msg.split()
+            else:
+                number_list = new_msg.split(',')
+            for number in number_list:
+                cursor.execute('DELETE FROM diary_db WHERE record=?', (Doings.endless_doings_dict[int(number)],))
+
+                await message.answer(
+                    emoji.emojize(
+                        f':check_mark_button: Дело {text(bold(Doings.endless_doings_dict[int(number)]))} было успешно удалено!'),
+                    reply_markup=main_kb, parse_mode=ParseMode.MARKDOWN)
+
+        await MainStates.first_pg.set()
+
         connect.commit()
         cursor.close()
-        await message.answer(
-            emoji.emojize(f':check_mark_button: Дело {Doings.doings_dict[number]} было успешно удалено!'),
-            reply_markup=main_kb)
-        await MainStates.first_pg.set()
     except Exception as e:
 
         await error(message, e)
@@ -260,8 +300,6 @@ async def accept_yes(callback_query: CallbackQuery):
         connect.commit()
         cursor.close()
 
-
-
     except Exception as e:
 
         await error(callback_query.message, e)
@@ -315,6 +353,7 @@ def doings_handlers_registration(dp):
     dp.register_message_handler(del_doing, state=Doings.number_doing)
 
     dp.register_message_handler(endless_doings, Text(equals='бессрочно', ignore_case=True), state=Doings.date)
+    dp.register_message_handler(today_doings, Text(equals='сегодня', ignore_case=True), state=Doings.date)
 
     dp.register_message_handler(get_time, state=Doings.time)
     dp.register_callback_query_handler(add_time, text='add_time', state="*")
@@ -328,7 +367,9 @@ def doings_handlers_registration(dp):
 
     # test
 
-    dp.register_message_handler(date_without_calendar, state=Doings.date)
+    # dp.register_message_handler(date_without_calendar, state=Doings.date)
+
+    #
 
     dp.register_callback_query_handler(make_record, text='add_doings', state="*")
     dp.register_callback_query_handler(dont_make_record, text='dont_add_doings', state="*")
@@ -339,4 +380,4 @@ def doings_handlers_registration(dp):
     dp.register_callback_query_handler(change_time, text='time', state="*")
     dp.register_callback_query_handler(change_record, text='doing', state="*")
 
-    # dp.register_callback_query_handler(process_simple_calendar, simple_cal_callback.filter(), state=Doings.date)
+    dp.register_callback_query_handler(process_simple_calendar, simple_cal_callback.filter(), state=Doings.date)

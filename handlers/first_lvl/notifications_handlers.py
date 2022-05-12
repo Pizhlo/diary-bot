@@ -7,7 +7,6 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from main_files.create_bot import bot
 from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.notifications_kb import add_notif_kb, edit_kb, acception_kb
-import schedule
 from aiogram.types import CallbackQuery
 from datetime import datetime
 
@@ -74,9 +73,16 @@ async def add_new_notif(message: types.Message):
 # @dp.message_handler(state = Notifications.record)
 async def get_date(message: types.Message):
     Notifications.record_text = message.text
-    await message.answer('Выберите дату, когда Вам нужно напомнить: ',
-                         reply_markup=await SimpleCalendar().start_calendar())
+    await message.answer(
+        'Выберите дату, когда Вам нужно напомнить (если ежедневно - просто напишите мне "ежедневно"): ',
+        reply_markup=await SimpleCalendar().start_calendar())
     await Notifications.date.set()
+
+
+# @dp.message_handler(Text(equals='ежедневно', ignore_case=True), state = Notifications.date)
+async def everyday_notif(message: types.Message):
+    pass
+    # TODO: доделать ежедневные напоминания
 
 
 # @dp.callback_query_handler(text='dont_make_notif')
@@ -90,7 +96,6 @@ async def dont_make_record(callback_query: CallbackQuery):
 async def notif_calender(callback_query: CallbackQuery, callback_data: dict):
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     await bot.answer_callback_query(callback_query.id)
-    print("notif")
     if selected:
         if date < datetime.today():
             await callback_query.message.answer(
