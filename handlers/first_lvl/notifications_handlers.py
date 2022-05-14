@@ -2,13 +2,17 @@ import emoji
 from aiogram import types
 from aiogram_calendar import simple_cal_callback, SimpleCalendar
 import sqlite3
-from main_files.common import MainStates, error
+from main_files.common import MainStates, error, scheduler
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from main_files.create_bot import bot
 from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.notifications_kb import add_notif_kb, edit_kb, acception_kb
 from aiogram.types import CallbackQuery
-from datetime import datetime
+from datetime import datetime, timedelta
+from aiogram.utils.markdown import text, bold
+from aiogram.types import ParseMode
+from aiogram.dispatcher.filters import Text
+from keyboards.first_lvl.main_kb import main_kb
 
 
 class Notifications(StatesGroup):
@@ -81,8 +85,9 @@ async def get_date(message: types.Message):
 
 # @dp.message_handler(Text(equals='ежедневно', ignore_case=True), state = Notifications.date)
 async def everyday_notif(message: types.Message):
-    pass
-    # TODO: доделать ежедневные напоминания
+    Notifications.date_text = 'ежедневно'
+    await message.answer('Напишите время, когда нужно присылать вам напоминания')
+    await Notifications.time.set()
 
 
 # @dp.callback_query_handler(text='dont_make_notif')
@@ -105,7 +110,7 @@ async def notif_calender(callback_query: CallbackQuery, callback_data: dict):
         if date >= datetime.today():
             Notifications.date_text = date.strftime('%d.%m.%Y')
             await bot.send_message(callback_query.from_user.id, f'Вы выбрали: {date.strftime("%d.%m.%Y")}')
-            await bot.send_message(callback_query.from_user.id, 'Теперь введите время, когда вам напомнить: ')
+            await bot.send_message(callback_query.from_user.id, 'Напишите время, когда нужно присылать вам напоминания')
             await Notifications.time.set()
 
 
@@ -125,27 +130,64 @@ async def acception(message: types.Message, state: FSMContext):
 
 
 # @dp.callback_query_handler(text='accept_notif')
-async def accept_yes(callback_query: CallbackQuery):  # добавить сюда schedule
+async def accept_yes(callback_query: CallbackQuery):
     try:
         await bot.answer_callback_query(callback_query.id)
         await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
-        await callback_query.message.answer(emoji.emojize(':check_mark_button: Отлично! Дело записано!'))
+
+        await callback_query.message.answer(
+            emoji.emojize(
+                f':check_mark_button: Отлично! Напоминание {text(bold(Notifications.record_text))} записано!'),
+            parse_mode=ParseMode.MARKDOWN, reply_markup=main_kb)
         await MainStates.first_pg.set()
+
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
         cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
             callback_query.from_user.id, Notifications.date_text, Notifications.record_text, 1,
             Notifications.time_text))
-        print('==========================')
-        check_2 = cursor.execute('SELECT * FROM diary_db WHERE user=?', (callback_query.from_user.id,))
-        for item in check_2:
-            print(item)
+
+        if Notifications.date_text != 'ежедневно':
+            scheduler.add_job(send_notif, 'date', run_date=(Notifications.date_text + Notifications.time_text))
+
+        if Notifications.date_text == 'ежедневно':
+
+            time_obj = datetime.strptime(Notifications.time_text, '%H:%M')
+
+            time = datetime.today().time().strftime('%H:%M')  # string
+            time_now = datetime.strptime(time, '%H:%M')  # date
+
+            time_1 = timedelta(hours=time_obj.hour, minutes=time_obj.minute)
+            time_2 = timedelta(hours=datetime.now().time().hour, minutes=datetime.now().time().minute)
+
+            difference_hours: timedelta
+
+            if time_obj > time_now:  # если время уже прошло
+                # 2019 - 12 - 25 11: 00:00
+
+                difference_hours = time_1 - time_2
+
+            else:
+
+                difference_hours = time_2 - time_1
+
+            scheduler.add_job(send_notif, 'interval', hours=24, start_date=(
+                    datetime.today().date() + timedelta(days=1, hours=difference_hours.seconds)).strftime(
+                '%Y-%m-%d %H:%M:%S'))
+
+            print(
+                f"Напоминание сработает {(datetime.today().date() + timedelta(days=1, hours=difference_hours.seconds)).strftime('%Y - %m - %d %H:%M:%S')}")
+
         connect.commit()
         cursor.close()
 
     except Exception as e:
 
         await error(callback_query.message, e)
+
+
+async def send_notif():
+    pass
 
 
 def notif_handlers_registration(dp):
@@ -156,6 +198,7 @@ def notif_handlers_registration(dp):
     dp.register_message_handler(get_time, state=Notifications.time)
 
     dp.register_message_handler(get_date, state=Notifications.record)
+    dp.register_message_handler(everyday_notif, Text(equals='ежедневно', ignore_case=True), state=Notifications.date)
 
     dp.register_callback_query_handler(accept_yes, text='accept_notif', state="*")
 
