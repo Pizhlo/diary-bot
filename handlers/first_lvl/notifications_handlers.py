@@ -13,6 +13,7 @@ from aiogram.utils.markdown import text, bold
 from aiogram.types import ParseMode
 from aiogram.dispatcher.filters import Text
 from keyboards.first_lvl.main_kb import main_kb
+from db.clean_database import delete_notification
 
 
 class Notifications(StatesGroup):
@@ -51,14 +52,19 @@ async def list_of_notif(message: types.Message):
         await message.answer('Хотите создать напоминание?', reply_markup=add_notif_kb)
     else:
         await message.answer('Вот ваши напоминания: ')
-        for row in records:
-            if row[4] == 0:
-                await message.answer(f'Название: {row[2]}\n'
-                                     f'Дата напоминания: {row[1]}', reply_markup=edit_kb)
-            else:
-                await message.answer(f'Название: {row[2]}\n'
-                                     f'Дата напоминания: {row[1]} {row[4]}', reply_markup=edit_kb)
+        text = make_text(records)
+        await message.answer(text, reply_markup=edit_kb)
     cursor.close()
+
+
+def make_text(records):
+    text = ''
+    i = 1
+
+    for row in records:
+        text += f'{i}. {row[2]} - {row[1]} {row[4]}\n'
+        i += 1
+    return text
 
 
 # @dp.callback_query_handler(text='add_doings')
@@ -78,9 +84,18 @@ async def add_new_notif(message: types.Message):
 async def get_date(message: types.Message):
     Notifications.record_text = message.text
     await message.answer(
-        'Выберите дату, когда Вам нужно напомнить (если ежедневно - просто напишите мне "ежедневно"): ',
+        'Выберите дату, когда Вам нужно напомнить (если это бессрочно, '
+        'просто напишите мне "бессрочно", если сегодня - напишите "сегодня"): ',
         reply_markup=await SimpleCalendar().start_calendar())
     await Notifications.date.set()
+
+
+# @dp.message_handler(Text(equals='сегодня', ignore_case=True))
+async def today_notif(message: types.Message, state: FSMContext):
+    Notifications.date_text = datetime.today().date().strftime('%d.%m.%Y')
+    await message.answer(f'Вы выбрали: {Notifications.date_text}')
+    await message.answer('Напишите время, когда нужно присылать вам напоминания')
+    await Notifications.time.set()
 
 
 # @dp.message_handler(Text(equals='ежедневно', ignore_case=True), state = Notifications.date)
@@ -95,6 +110,7 @@ async def dont_make_record(callback_query: CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
     await callback_query.message.answer(emoji.emojize(':check_mark_button: ОК'))
+    await MainStates.first_pg.set()
 
 
 # @dp.callback_query_handler(simple_cal_callback.filter())
@@ -148,7 +164,33 @@ async def accept_yes(callback_query: CallbackQuery):
             Notifications.time_text))
 
         if Notifications.date_text != 'ежедневно':
-            scheduler.add_job(send_notif, 'date', run_date=(Notifications.date_text + Notifications.time_text))
+
+            day = str()
+            month = str()
+            year = str()
+            hour = str()
+            min = str()
+
+            for i in range(0, 2):
+                day += Notifications.date_text[i]
+
+            for i in range(3, 5):
+                month += Notifications.date_text[i]
+
+            for i in range(6, 10):
+                year += Notifications.date_text[i]
+
+            for i in range(0, 2):
+                hour += Notifications.time_text[i]
+
+            for i in range(3, 5):
+                min += Notifications.time_text[i]
+
+            scheduler.add_job(send_notif, 'date',
+                              run_date=datetime(int(year), int(month), int(day), int(hour), int(min), 0))
+
+            scheduler.add_job(delete_notification, 'cron', year=year, month=month, day=day, hour=hour,
+                              minute=str(int(min) + 1))
 
         if Notifications.date_text == 'ежедневно':
 
@@ -199,6 +241,7 @@ def notif_handlers_registration(dp):
 
     dp.register_message_handler(get_date, state=Notifications.record)
     dp.register_message_handler(everyday_notif, Text(equals='ежедневно', ignore_case=True), state=Notifications.date)
+    dp.register_message_handler(today_notif, Text(equals='сегодня', ignore_case=True), state=Notifications.date)
 
     dp.register_callback_query_handler(accept_yes, text='accept_notif', state="*")
 
