@@ -7,8 +7,6 @@ from handlers.first_lvl.notifications_handlers import notif_handlers_registratio
 from main_files.common import send_morning_msg, scheduler
 
 
-
-
 async def on_startup(_):
     print('Бот онлайн')
     scheduler.add_job(send_morning_msg, 'cron', hour='8', minute='30', second='0')

@@ -172,7 +172,8 @@ async def choose_doings(message: types.Message):
         cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 0))
         records = cursor.fetchall()
         await message.answer(
-            'Выберите, какое дело хотите удалить (отправьте список цифр). Если вы хотите удалить запись из списка '
+            'Выберите, какую запись хотите удалить (отправьте одну или несколько цифр).'
+            'Если вы хотите удалить запись из списка '
             'бессрочных дел, '
             'сообщение должно содержать слово "бессрочно"')
 
@@ -255,7 +256,8 @@ async def accept_yes(callback_query: CallbackQuery):
         await bot.answer_callback_query(callback_query.id)
         await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
         await callback_query.message.answer(
-            emoji.emojize(f':check_mark_button: Отлично! Дело {text(bold(Doings.record_text))} записано!'), parse_mode=ParseMode.MARKDOWN)
+            emoji.emojize(f':check_mark_button: Отлично! Дело {text(bold(Doings.record_text))} записано!'),
+            parse_mode=ParseMode.MARKDOWN)
         await MainStates.first_pg.set()
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
@@ -295,6 +297,7 @@ async def accept_yes(callback_query: CallbackQuery):
         elif Doings.date_text != 'Бессрочно' and Doings.time_text:
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
                 callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, Doings.time_text))
+
             scheduler.add_job(delete_doings_with_time, 'cron', year=year, month=month, day=day, hour=hour,
                               minute=str(int(min) + 1))
         connect.commit()
@@ -347,7 +350,7 @@ def doings_handlers_registration(dp):
     dp.register_message_handler(list_of_doings, lambda message: 'Список дел' in message.text,
                                 state=MainStates.first_pg)
     dp.register_message_handler(come_back, lambda message: 'Назад' in message.text, state="*")
-    dp.register_message_handler(choose_doings, lambda message: 'Удалить' in message.text, state="*")
+    dp.register_message_handler(choose_doings, lambda message: 'Удалить дело' in message.text, state="*")
     dp.register_message_handler(add_new_doing, lambda message: 'Добавить дело' in message.text, state='*')
 
     dp.register_message_handler(del_doing, state=Doings.number_doing)

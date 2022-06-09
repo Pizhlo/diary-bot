@@ -6,7 +6,7 @@ from main_files.common import MainStates, error, scheduler
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from main_files.create_bot import bot
 from aiogram.dispatcher import FSMContext
-from keyboards.first_lvl.notifications_kb import add_notif_kb, edit_kb, acception_kb
+from keyboards.first_lvl.notifications_kb import add_notif_kb, edit_kb, acception_kb, dell_all_kb
 from aiogram.types import CallbackQuery
 from datetime import datetime, timedelta
 from aiogram.utils.markdown import text, bold
@@ -43,9 +43,6 @@ async def list_of_notif(message: types.Message):
 
     cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
     records = cursor.fetchall()
-
-    for item in records:
-        print("item = ", item)
 
     if not records:
         await message.answer('У вас нет напоминаний.')
@@ -84,8 +81,8 @@ async def add_new_notif(message: types.Message):
 async def get_date(message: types.Message):
     Notifications.record_text = message.text
     await message.answer(
-        'Выберите дату, когда Вам нужно напомнить (если это бессрочно, '
-        'просто напишите мне "бессрочно", если сегодня - напишите "сегодня"): ',
+        'Выберите дату, когда Вам нужно напомнить (если каждый день, '
+        'просто напишите мне "ежедневно", если сегодня - напишите "сегодня"): ',
         reply_markup=await SimpleCalendar().start_calendar())
     await Notifications.date.set()
 
@@ -143,6 +140,104 @@ async def acception(message: types.Message, state: FSMContext):
                          f'Дата: {Notifications.date_text} {Notifications.time_text}\n')
     await message.answer('Все верно?', reply_markup=acception_kb)
     await state.finish()
+
+
+# @dp.message_handler(lambda message: 'Удалить напоминание' in message.text, state="*")
+async def choose_notif(message: types.Message):
+    try:
+        connect = sqlite3.connect('..\\db\\main_db.db')
+        cursor = connect.cursor()
+        cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
+        records = cursor.fetchall()
+        await message.answer(
+            'Выберите, какую запись хотите удалить (отправьте одну или несколько цифр). ')
+
+        i = 1
+
+        for row in records:
+            Notifications.notif_dict[i] = row[2]
+            i += 1
+
+        text = make_text(records)
+
+        await message.answer(text, reply_markup=dell_all_kb)
+        await Notifications.number_doing.set()
+        connect.close()
+
+    except Exception as e:
+
+        await error(message, e)
+
+
+# @dp.message_handler(lambda message: 'Удалить все' in message.text, state="*")
+async def del_all(message: types.Message):
+    try:
+        connect = sqlite3.connect('..\\db\\main_db.db')
+        cursor = connect.cursor()
+        cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
+        records = cursor.fetchall()
+
+        temp_list = list()
+
+        for item in records:
+            temp_list.append(item)
+
+        cursor.execute('DELETE * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
+
+        for item in temp_list:
+            await message.answer(
+                emoji.emojize(
+                    f':check_mark_button: Дело {text(bold(item))} '
+                    f'было успешно удалено!'),
+                reply_markup=main_kb, parse_mode=ParseMode.MARKDOWN)
+
+        await MainStates.first_pg.set()
+
+        connect.commit()
+        cursor.close()
+
+    except Exception as e:
+
+        await error(message, e)
+
+
+async def del_notif(message: types.Message):  # когда пользователь хочет вручную удалить напоминание
+    try:
+        print("this funciton")
+        connect = sqlite3.connect('..\\db\\main_db.db')
+        cursor = connect.cursor()
+
+        print(message.text)
+
+        if 'Удалить все' in message.text:
+            await del_all(message)
+
+            return
+
+        else:
+
+            if len(message.text) == 1:
+                cursor.execute('DELETE FROM diary_db WHERE record=?', (Notifications.notif_dict[int(message.text)],))
+            else:
+                if ',' not in message.text:
+                    number_list = message.text.split()
+                else:
+                    number_list = message.text.split(',')
+                for number in number_list:
+                    cursor.execute('DELETE FROM diary_db WHERE record=?', (Notifications.notif_dict[int(number)],))
+                    await message.answer(
+                        emoji.emojize(
+                            f':check_mark_button: Дело {text(bold(Notifications.notif_dict[int(number)]))} '
+                            f'было успешно удалено!'),
+                        reply_markup=main_kb, parse_mode=ParseMode.MARKDOWN)
+
+            await MainStates.first_pg.set()
+
+            connect.commit()
+            cursor.close()
+    except Exception as e:
+
+        await error(message, e)
 
 
 # @dp.callback_query_handler(text='accept_notif')
@@ -238,6 +333,12 @@ def notif_handlers_registration(dp):
     dp.register_message_handler(add_new_notif, lambda message: 'Добавить напоминание' in message.text,
                                 state="*")
     dp.register_message_handler(get_time, state=Notifications.time)
+
+    dp.register_message_handler(del_notif, state=Notifications.number_doing)
+    dp.register_message_handler(choose_notif, lambda message: 'Удалить напоминание' in message.text,
+                                state="*")
+    dp.register_message_handler(del_all, lambda message: 'Удалить все' in message.text,
+                                state=Notifications.number_doing)
 
     dp.register_message_handler(get_date, state=Notifications.record)
     dp.register_message_handler(everyday_notif, Text(equals='ежедневно', ignore_case=True), state=Notifications.date)

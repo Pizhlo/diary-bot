@@ -10,7 +10,15 @@ def delete_doings_with_time():  # очистка БД; удаляет запис
 
     time = (datetime.now() - timedelta(minutes=1)).strftime("%H:%M")
 
+    print(date)
+    print(time)
+
     print('удаляется дело')
+
+    cursor.execute('SELECT * FROM diary_db WHERE date=? and time=? and notification=?', (date, time, 0))
+    records = cursor.fetchall()
+
+    print("records for delete= ", records)
 
     cursor.execute('DELETE FROM diary_db WHERE date=? and time=?', (date, time))
 
@@ -33,7 +41,7 @@ def delete_notification():
     cursor.execute('SELECT * FROM diary_db WHERE date=? and time=? and notification=?', (date, time, 0))
     records = cursor.fetchall()
 
-    print(records)  # здесь пусто
+    print("records = ", records)  # здесь пусто
 
     cursor.execute('DELETE FROM diary_db WHERE date=? and time=? and notification=?', (date, time, 0))
 
