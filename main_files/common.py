@@ -5,8 +5,7 @@ from aiogram.utils.markdown import text, bold
 from aiogram.types import ParseMode
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from keyboards.first_lvl.main_kb import main_kb
-from datetime import datetime
-import sqlite3
+from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 scheduler = AsyncIOScheduler()
@@ -52,21 +51,18 @@ async def error(message: types.Message, e):
         f'ошибка: \n' + str(e)), parse_mode=ParseMode.MARKDOWN)
 
 
-async def send_morning_msg():
-    date = datetime.today().date().strftime('%d.%m.%Y')
-    connect = sqlite3.connect('..\\db\\main_db.db')
-    cursor = connect.cursor()
-    cursor.execute('SELECT * FROM diary_db WHERE date=?', (date,))
-    records = cursor.fetchall()
+def difference_time(time):
+    time_obj = datetime.strptime(time, '%H:%M')
 
-    i = 1
-    if records:
-        for row in records:
-            if row[4]:
-                Doings.mornings_doings_text += f'{i}. {row[2]} {row[1]} {row[4]}. \n'
-            else:
-                Doings.mornings_doings_text += f'{i}. {row[2]} {row[1]}. \n'
-            i += 1
-        await bot.send_message(records[0][0], f'Привет! На сегодня у тебя запланировано: \n'
-                                              f'{Doings.mornings_doings_text}')
-    cursor.close()
+    time = datetime.today().time().strftime('%H:%M')  # string
+    time_now = datetime.strptime(time, '%H:%M')  # date
+
+    time_1 = timedelta(hours=time_obj.hour, minutes=time_obj.minute)
+    time_2 = timedelta(hours=datetime.now().time().hour, minutes=datetime.now().time().minute)
+
+    difference_hours: timedelta
+
+    if time_obj > time_now:  # если время уже прошло
+        return True, time_1, time_2
+    else:
+        return True, time_1, time_2

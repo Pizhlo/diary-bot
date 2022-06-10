@@ -15,3 +15,7 @@ edit_kb.row(btn_2, btn_3).add(btn_1)
 acception_yes = InlineKeyboardButton('Да', callback_data='accept_notif')
 acception_no = InlineKeyboardButton('Нет', callback_data='dont_accept_notif')
 acception_kb = InlineKeyboardMarkup(row_width=2).row(acception_yes, acception_no)
+
+del_all = KeyboardButton(emoji.emojize('Удалить все :cross_mark:'))
+dell_all_kb = ReplyKeyboardMarkup(resize_keyboard=True)
+dell_all_kb.row(del_all)

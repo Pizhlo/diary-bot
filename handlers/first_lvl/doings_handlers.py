@@ -6,6 +6,7 @@ from main_files.common import MainStates, error, Doings, scheduler
 from main_files.create_bot import bot
 from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.doings_kb import acception_kb, add_doings_kb, edit_kb, change_kb, add_time_kb
+from keyboards.first_lvl.notifications_kb import dell_all_kb
 from keyboards.first_lvl.main_kb import main_kb
 from aiogram.types import CallbackQuery
 from datetime import datetime
@@ -13,6 +14,7 @@ from aiogram.utils.markdown import text, bold
 from aiogram.dispatcher.filters import Text
 from db.clean_database import delete_doings_with_time
 from aiogram.types import ParseMode
+from handlers.first_lvl.send_msg import send_morning_msg
 
 
 # @dp.message_handler(lambda message: 'Список дел' in message.text)
@@ -167,12 +169,13 @@ def make_text(records):
 # @dp.message_handler(lambda message: 'Удалить' in message.text, state="*")
 async def choose_doings(message: types.Message):
     try:
+
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
         cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 0))
         records = cursor.fetchall()
         await message.answer(
-            'Выберите, какую запись хотите удалить (отправьте одну или несколько цифр).'
+            'Выберите, какую запись хотите удалить (отправьте одну или несколько цифр). '
             'Если вы хотите удалить запись из списка '
             'бессрочных дел, '
             'сообщение должно содержать слово "бессрочно"')
@@ -191,11 +194,44 @@ async def choose_doings(message: types.Message):
         endless, text, text_2 = make_text(records)
 
         if endless:
-            await message.answer(text + text_2, reply_markup=edit_kb)
+            await message.answer(text + text_2, reply_markup=dell_all_kb)
         else:
-            await message.answer(text, reply_markup=edit_kb)
+            await message.answer(text, reply_markup=dell_all_kb)
         await Doings.number_doing.set()
         connect.close()
+
+    except Exception as e:
+
+        await error(message, e)
+
+
+# @dp.message_handler(lambda message: 'Удалить все' in message.text, state=Doings.number_doing)
+async def del_all_doings(message: types.Message):
+    print("del_all_doings")
+    try:
+        connect = sqlite3.connect('..\\db\\main_db.db')
+        cursor = connect.cursor()
+        cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 0))
+        records = cursor.fetchall()
+
+        temp_list = list()
+
+        for item in records:
+            temp_list.append(item[2])
+
+        cursor.execute('DELETE FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 0))
+
+        for item in temp_list:
+            await message.answer(
+                emoji.emojize(
+                    f':check_mark_button: Дело {text(bold(item))} '
+                    f'было успешно удалено!'),
+                reply_markup=main_kb, parse_mode=ParseMode.MARKDOWN)
+
+        await MainStates.first_pg.set()
+
+        connect.commit()
+        cursor.close()
 
     except Exception as e:
 
@@ -205,6 +241,12 @@ async def choose_doings(message: types.Message):
 # @dp.message_handler(state=number_doing)
 async def del_doing(message: types.Message):  # когда пользователь хочет вручную удалить дело
     try:
+        print("del_doing")
+
+        if 'Удалить все' in message.text:
+            await del_all_doings(message)
+
+            return
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
 
@@ -294,6 +336,11 @@ async def accept_yes(callback_query: CallbackQuery):
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
                 callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, 0))
 
+            scheduler.add_job(send_morning_msg, 'cron', year=year, month=month, day=day, hour=hour,
+                              minute=str(int(min) + 1), kwargs={'id': callback_query.from_user.id,
+                                                                'record': Doings.record_text,
+                                                                'date': Doings.date_text})
+
         elif Doings.date_text != 'Бессрочно' and Doings.time_text:
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
                 callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, Doings.time_text))
@@ -354,6 +401,8 @@ def doings_handlers_registration(dp):
     dp.register_message_handler(add_new_doing, lambda message: 'Добавить дело' in message.text, state='*')
 
     dp.register_message_handler(del_doing, state=Doings.number_doing)
+    dp.register_message_handler(del_all_doings, lambda message: 'Удалить все' in message.text,
+                                state=Doings.number_doing)
 
     dp.register_message_handler(endless_doings, Text(equals='бессрочно', ignore_case=True), state=Doings.date)
     dp.register_message_handler(today_doings, Text(equals='сегодня', ignore_case=True), state=Doings.date)

@@ -2,7 +2,7 @@ import emoji
 from aiogram import types
 from aiogram_calendar import simple_cal_callback, SimpleCalendar
 import sqlite3
-from main_files.common import MainStates, error, scheduler
+from main_files.common import MainStates, error, scheduler, difference_time
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from main_files.create_bot import bot
 from aiogram.dispatcher import FSMContext
@@ -14,6 +14,7 @@ from aiogram.types import ParseMode
 from aiogram.dispatcher.filters import Text
 from keyboards.first_lvl.main_kb import main_kb
 from db.clean_database import delete_notification
+from handlers.first_lvl.send_msg import send_notif
 
 
 class Notifications(StatesGroup):
@@ -169,7 +170,7 @@ async def choose_notif(message: types.Message):
         await error(message, e)
 
 
-# @dp.message_handler(lambda message: 'Удалить все' in message.text, state="*")
+# @dp.message_handler(lambda message: 'Удалить все' in message.text, state=Notifications.number_doing)
 async def del_all(message: types.Message):
     try:
         connect = sqlite3.connect('..\\db\\main_db.db')
@@ -180,14 +181,14 @@ async def del_all(message: types.Message):
         temp_list = list()
 
         for item in records:
-            temp_list.append(item)
+            temp_list.append(item[2])
 
-        cursor.execute('DELETE * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
+        cursor.execute('DELETE FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 1))
 
         for item in temp_list:
             await message.answer(
                 emoji.emojize(
-                    f':check_mark_button: Дело {text(bold(item))} '
+                    f':check_mark_button: Напоминание {text(bold(item))} '
                     f'было успешно удалено!'),
                 reply_markup=main_kb, parse_mode=ParseMode.MARKDOWN)
 
@@ -203,11 +204,6 @@ async def del_all(message: types.Message):
 
 async def del_notif(message: types.Message):  # когда пользователь хочет вручную удалить напоминание
     try:
-        print("this funciton")
-        connect = sqlite3.connect('..\\db\\main_db.db')
-        cursor = connect.cursor()
-
-        print(message.text)
 
         if 'Удалить все' in message.text:
             await del_all(message)
@@ -215,6 +211,9 @@ async def del_notif(message: types.Message):  # когда пользовате�
             return
 
         else:
+
+            connect = sqlite3.connect('..\\db\\main_db.db')
+            cursor = connect.cursor()
 
             if len(message.text) == 1:
                 cursor.execute('DELETE FROM diary_db WHERE record=?', (Notifications.notif_dict[int(message.text)],))
@@ -282,35 +281,31 @@ async def accept_yes(callback_query: CallbackQuery):
                 min += Notifications.time_text[i]
 
             scheduler.add_job(send_notif, 'date',
-                              run_date=datetime(int(year), int(month), int(day), int(hour), int(min), 0))
+                              run_date=datetime(int(year), int(month), int(day), int(hour), int(min), 0),
+                              kwargs={'id': callback_query.from_user.id, 'record': Notifications.record_text,
+                                      'month': month, 'day': day, 'hour': hour, 'min': min})
 
             scheduler.add_job(delete_notification, 'cron', year=year, month=month, day=day, hour=hour,
                               minute=str(int(min) + 1))
 
         if Notifications.date_text == 'ежедневно':
 
-            time_obj = datetime.strptime(Notifications.time_text, '%H:%M')
+            difference, time1, time2 = difference_time(Notifications.time_text)
 
-            time = datetime.today().time().strftime('%H:%M')  # string
-            time_now = datetime.strptime(time, '%H:%M')  # date
-
-            time_1 = timedelta(hours=time_obj.hour, minutes=time_obj.minute)
-            time_2 = timedelta(hours=datetime.now().time().hour, minutes=datetime.now().time().minute)
-
-            difference_hours: timedelta
-
-            if time_obj > time_now:  # если время уже прошло
+            if difference:  # если время уже прошло
                 # 2019 - 12 - 25 11: 00:00
 
-                difference_hours = time_1 - time_2
+                difference_hours = time1 - time2
 
             else:
 
-                difference_hours = time_2 - time_1
+                difference_hours = time2 - time1
 
             scheduler.add_job(send_notif, 'interval', hours=24, start_date=(
                     datetime.today().date() + timedelta(days=1, hours=difference_hours.seconds)).strftime(
-                '%Y-%m-%d %H:%M:%S'))
+                '%Y-%m-%d %H:%M:%S'),
+                              kwargs={'id': callback_query.from_user.id, 'record': Notifications.record_text,
+                                      'month': 'everyday', 'time': Notifications.time_text})
 
             print(
                 f"Напоминание сработает {(datetime.today().date() + timedelta(days=1, hours=difference_hours.seconds)).strftime('%Y - %m - %d %H:%M:%S')}")
@@ -321,10 +316,6 @@ async def accept_yes(callback_query: CallbackQuery):
     except Exception as e:
 
         await error(callback_query.message, e)
-
-
-async def send_notif():
-    pass
 
 
 def notif_handlers_registration(dp):
