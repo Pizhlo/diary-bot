@@ -4,12 +4,13 @@ from handlers.first_lvl.main_handlers import main_handlers_registration
 from handlers.first_lvl.doings_handlers import doings_handlers_registration
 from db.clean_database import clean_db
 from handlers.first_lvl.notifications_handlers import notif_handlers_registration
-from main_files.common import send_morning_msg, scheduler
+from main_files.common import scheduler
+from handlers.first_lvl.send_msg import send_morning_msg
 
 
 async def on_startup(_):
     print('Бот онлайн')
-    scheduler.add_job(send_morning_msg, 'cron', hour='8', minute='30', second='0')
+    scheduler.add_job(send_morning_msg, 'cron', hour='21', minute='37', second='0')
     scheduler.add_job(clean_db, 'interval', hours=1)
     scheduler.start()
 

@@ -51,8 +51,8 @@ async def error(message: types.Message, e):
         f'ошибка: \n' + str(e)), parse_mode=ParseMode.MARKDOWN)
 
 
-def difference_time(time):
-    time_obj = datetime.strptime(time, '%H:%M')
+def difference_time(time_time):
+    time_obj = datetime.strptime(time_time, '%H:%M')
 
     time = datetime.today().time().strftime('%H:%M')  # string
     time_now = datetime.strptime(time, '%H:%M')  # date
@@ -60,9 +60,9 @@ def difference_time(time):
     time_1 = timedelta(hours=time_obj.hour, minutes=time_obj.minute)
     time_2 = timedelta(hours=datetime.now().time().hour, minutes=datetime.now().time().minute)
 
-    difference_hours: timedelta
-
-    if time_obj > time_now:  # если время уже прошло
-        return True, time_1, time_2
-    else:
+    if time_obj > time_now:
+        print(False)
+        return False, time_1, time_2
+    else:  # если время уже прошло
+        print(True)
         return True, time_1, time_2

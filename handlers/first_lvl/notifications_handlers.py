@@ -247,7 +247,8 @@ async def accept_yes(callback_query: CallbackQuery):
 
         await callback_query.message.answer(
             emoji.emojize(
-                f':check_mark_button: Отлично! Напоминание {text(bold(Notifications.record_text))} записано!'),
+                f':check_mark_button: Отлично! Напоминание {text(bold(Notifications.record_text))} сработает '
+                f'{Notifications.date_text} в {Notifications.time_text}!'),
             parse_mode=ParseMode.MARKDOWN, reply_markup=main_kb)
         await MainStates.first_pg.set()
 
@@ -293,22 +294,22 @@ async def accept_yes(callback_query: CallbackQuery):
             difference, time1, time2 = difference_time(Notifications.time_text)
 
             if difference:  # если время уже прошло
-                # 2019 - 12 - 25 11: 00:00
+                day = (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d')
 
-                difference_hours = time1 - time2
+                start_date = datetime.strptime(day + ' ' + Notifications.time_text, '%Y-%m-%d %H:%M')
+
+                scheduler.add_job(send_notif, 'interval', hours=24, start_date=start_date,
+                                  kwargs={'id': callback_query.from_user.id, 'record': Notifications.record_text,
+                                          'month': 'everyday', 'time': Notifications.time_text})
 
             else:
+                day = (datetime.today()).strftime('%Y-%m-%d')
 
-                difference_hours = time2 - time1
+                start_date = datetime.strptime(day + ' ' + Notifications.time_text, '%Y-%m-%d %H:%M')
 
-            scheduler.add_job(send_notif, 'interval', hours=24, start_date=(
-                    datetime.today().date() + timedelta(days=1, hours=difference_hours.seconds)).strftime(
-                '%Y-%m-%d %H:%M:%S'),
-                              kwargs={'id': callback_query.from_user.id, 'record': Notifications.record_text,
-                                      'month': 'everyday', 'time': Notifications.time_text})
-
-            print(
-                f"Напоминание сработает {(datetime.today().date() + timedelta(days=1, hours=difference_hours.seconds)).strftime('%Y - %m - %d %H:%M:%S')}")
+                scheduler.add_job(send_notif, 'interval', hours=24, start_date=start_date,
+                                  kwargs={'id': callback_query.from_user.id, 'record': Notifications.record_text,
+                                          'month': 'everyday', 'time': Notifications.time_text})
 
         connect.commit()
         cursor.close()

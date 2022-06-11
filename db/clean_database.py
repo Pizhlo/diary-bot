@@ -24,6 +24,8 @@ def delete_notification():
 
     time = (datetime.now() - timedelta(minutes=1)).strftime("%H:%M")
 
+    print('deleting notif')
+
     cursor.execute('DELETE FROM diary_db WHERE date=? and time=? and notification=?', (date, time, 1))
 
     connect.commit()

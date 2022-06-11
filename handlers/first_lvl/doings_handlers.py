@@ -207,7 +207,6 @@ async def choose_doings(message: types.Message):
 
 # @dp.message_handler(lambda message: 'Удалить все' in message.text, state=Doings.number_doing)
 async def del_all_doings(message: types.Message):
-    print("del_all_doings")
     try:
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
@@ -241,7 +240,6 @@ async def del_all_doings(message: types.Message):
 # @dp.message_handler(state=number_doing)
 async def del_doing(message: types.Message):  # когда пользователь хочет вручную удалить дело
     try:
-        print("del_doing")
 
         if 'Удалить все' in message.text:
             await del_all_doings(message)
@@ -336,10 +334,10 @@ async def accept_yes(callback_query: CallbackQuery):
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
                 callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, 0))
 
-            scheduler.add_job(send_morning_msg, 'cron', year=year, month=month, day=day, hour=hour,
-                              minute=str(int(min) + 1), kwargs={'id': callback_query.from_user.id,
-                                                                'record': Doings.record_text,
-                                                                'date': Doings.date_text})
+            #scheduler.add_job(send_morning_msg, 'cron', year=year, month=month, day=day, hour=hour,
+                            #  minute=str(int(min) + 1), kwargs={'id': callback_query.from_user.id,
+                                                               # 'record': Doings.record_text,
+                                                              #  'date': Doings.date_text})
 
         elif Doings.date_text != 'Бессрочно' and Doings.time_text:
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
@@ -347,6 +345,8 @@ async def accept_yes(callback_query: CallbackQuery):
 
             scheduler.add_job(delete_doings_with_time, 'cron', year=year, month=month, day=day, hour=hour,
                               minute=str(int(min) + 1))
+
+        Doings.time_text = ''
         connect.commit()
         cursor.close()
 
