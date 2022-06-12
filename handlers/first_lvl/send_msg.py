@@ -4,6 +4,8 @@ from aiogram.types import ParseMode
 import emoji
 import sqlite3
 import datetime
+from operator import itemgetter
+from itertools import groupby
 
 
 async def send_notif(**kwargs):
@@ -30,24 +32,34 @@ async def send_notif(**kwargs):
 
 
 async def send_morning_msg():
-    variable, result = check_db()
+    result = check_db()
 
-    sorted_dict = list({})
-    sorted_keys = list()
+    temp_list = dict()  # для отправки в функцию отправления сообщения
+    count_dict = dict()  # для хранения количества уникальных id
 
     # TODO: нужно отсортировать result по id, чтобы потом передавать в функцию, которая
     # TODO: составляет текст вида: "Ваши дела: 1. .. 2. .. 3. .. Бессрочные: ...
 
-    for i in range(1, len(result)):
-        sorted_keys = sorted(result, key=result[i].get)
+    if result:
+        sorted_list = sorted(result, key=itemgetter("id"))  # сортировать по id
+        r = groupby(sorted(sorted_list, key=lambda x: x['id']), lambda x: x['id'])  # для подсчета кол-ва id
+        for i in range(len(result)):
+            print(f"sorted_list[{i}] = {sorted_list[i]}")
+        for k, g in r:
+            count_dict[k] = len(list(g))
+        keys = list(count_dict.keys())
 
-    for w in sorted_keys:
-        sorted_dict[w] = result[w]
+        for key in keys:  # key = id
+            for j in range(len(sorted_list)):
+                if 'usual_records' in sorted_list[j].keys():
+                    temp_list[key] = {sorted_list[j]['usual_records']: {'date': sorted_list[j]['date'],
+                                                                        'time': sorted_list[j]['time']}}
+                elif 'endless_records' in sorted_list[j].keys():
+                    temp_list[key] = {sorted_list[j]['endless_records']: {'date': sorted_list[j]['date'],
+                                                                          'time': sorted_list[j]['time']}}
+                print("temp list = ", temp_list)
 
-    print(sorted_dict)
 
-    # for i in range(1, len(result)):
-    # print(result[i]['id'].sort)
 
 
 def check_db():
@@ -59,31 +71,22 @@ def check_db():
     cursor.execute('SELECT * FROM diary_db WHERE date=? or date=? and notification=?', (date, 'Бессрочно', 0))
     records = cursor.fetchall()
 
-    result = list()
-    x = {'id': int(), 'usual_records': str(), 'endless_records': str(), 'time': str(),
-         'date': str()}
-    result.append(x)
+    result = list({})
 
     if records:
         for row in records:
-            if row[1] != 'Бессрочно':
-                if row[4] == 0:  # time
-                    result.append({'id': row[0], 'usual_records': row[2], 'date': row[1]})
-                else:
-                    result.append({'id': row[0], 'usual_records': row[2], 'time': row[4],
-                                   'date': row[1]})
-            else:
-                result.append({'id': row[0], 'endless_records': row[2], 'date': row[1]})
+            result.append({'id': row[0], 'usual_records': row[2], 'time': row[4],
+                           'date': row[1]})
 
         cursor.close()
 
-        return True, result
+        return result
     else:
         cursor.close()
-        return 0, 0
+        return None
 
 
-def make_message():
+def make_message(**kwargs):
     text = 'Доброе утро! Вот ваши дела на сегодня: '
     text_2 = '              \n' \
              'Бессрочные дела:\n' \
@@ -91,5 +94,7 @@ def make_message():
 
     i = 1
     k = 1
+
+    # if 'last' == True:
 
     return text, text_2

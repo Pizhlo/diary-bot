@@ -10,8 +10,8 @@ from handlers.first_lvl.send_msg import send_morning_msg
 
 async def on_startup(_):
     print('Бот онлайн')
-    scheduler.add_job(send_morning_msg, 'cron', hour='21', minute='37', second='0')
-    scheduler.add_job(clean_db, 'interval', hours=1)
+    scheduler.add_job(send_morning_msg, 'cron', hour='23', minute='26', second='20')
+    scheduler.add_job(clean_db, 'cron', hour='0', minute='0', second='0')
     scheduler.start()
 
 

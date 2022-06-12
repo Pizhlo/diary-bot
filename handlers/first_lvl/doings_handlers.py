@@ -297,7 +297,7 @@ async def accept_yes(callback_query: CallbackQuery):
         await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
         await callback_query.message.answer(
             emoji.emojize(f':check_mark_button: Отлично! Дело {text(bold(Doings.record_text))} записано!'),
-            parse_mode=ParseMode.MARKDOWN)
+            parse_mode=ParseMode.MARKDOWN, reply_markup=main_kb)
         await MainStates.first_pg.set()
         connect = sqlite3.connect('..\\db\\main_db.db')
         cursor = connect.cursor()
