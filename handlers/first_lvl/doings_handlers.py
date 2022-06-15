@@ -1,3 +1,4 @@
+from operator import itemgetter
 import emoji
 from aiogram import types
 from aiogram_calendar import simple_cal_callback, SimpleCalendar
@@ -14,7 +15,6 @@ from aiogram.utils.markdown import text, bold
 from aiogram.dispatcher.filters import Text
 from db.clean_database import delete_doings_with_time
 from aiogram.types import ParseMode
-from handlers.first_lvl.send_msg import send_morning_msg
 
 
 # @dp.message_handler(lambda message: 'Список дел' in message.text)
@@ -25,12 +25,51 @@ async def list_of_doings(message: types.Message):
     cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 0))
     records = cursor.fetchall()
 
+    print("records = ", records)
+
     if not records:
         await message.answer('У вас нет запланированных дел.')
         await message.answer('Хотите добавить дело?', reply_markup=add_doings_kb)
     else:
+        result = list({})
+        endless = False
+        text = ''
+        text_2 = '              \n' \
+                 'Бессрочные дела:\n' \
+                 '                \n'
+        j = 1
+        k = 1
+        for row in records:
+            result.append({'id': row[0], 'record': row[2], 'time': row[4],
+                           'date': row[1]})
+        res = {}
+
+        for i in result:
+            if i['id'] not in res:
+                res[i['id']] = []
+            new_data = i.copy()
+            new_data.pop('id')
+            res[i['id']].append(new_data)
+
+        for id in res:
+            sorted_list = sorted(res[id], key=itemgetter("date", "time"))
+            for value in sorted_list:
+                if value['date'] == 'Бессрочно':
+                    endless = True
+                    text_2 += f'{k}. {value["record"]}\n'
+                    k += 1
+                else:
+                    if value['time'] == 0:
+                        text += f'{j}. {value["record"]} - {value["date"]}\n'
+                        j += 1
+                    else:
+                        text += f'{j}. {value["record"]} - {value["date"]} {value["time"]}\n'
+                        j += 1
+
+            print(f'id = {id}, msg = {text + text_2}')
+
         await message.answer('Вот ваши дела: ')
-        endless, text, text_2 = make_text(records)
+        # endless, text, text_2 = make_text(records)
         if endless:
             await message.answer(text + text_2, reply_markup=edit_kb)
         else:
@@ -334,10 +373,10 @@ async def accept_yes(callback_query: CallbackQuery):
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (
                 callback_query.from_user.id, Doings.date_text, Doings.record_text, 0, 0))
 
-            #scheduler.add_job(send_morning_msg, 'cron', year=year, month=month, day=day, hour=hour,
-                            #  minute=str(int(min) + 1), kwargs={'id': callback_query.from_user.id,
-                                                               # 'record': Doings.record_text,
-                                                              #  'date': Doings.date_text})
+            # scheduler.add_job(send_morning_msg, 'cron', year=year, month=month, day=day, hour=hour,
+            #  minute=str(int(min) + 1), kwargs={'id': callback_query.from_user.id,
+            # 'record': Doings.record_text,
+            #  'date': Doings.date_text})
 
         elif Doings.date_text != 'Бессрочно' and Doings.time_text:
             cursor.execute('INSERT INTO diary_db (user, date, record, notification, time) VALUES (?, ?, ?, ?, ?)', (

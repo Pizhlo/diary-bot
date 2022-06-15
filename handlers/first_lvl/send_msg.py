@@ -1,11 +1,10 @@
+from operator import itemgetter
 from main_files.create_bot import bot
 from aiogram.utils.markdown import text, bold
 from aiogram.types import ParseMode
-import emoji
 import sqlite3
 import datetime
-from operator import itemgetter
-from itertools import groupby
+import emoji
 
 
 async def send_notif(**kwargs):
@@ -34,32 +33,16 @@ async def send_notif(**kwargs):
 async def send_morning_msg():
     result = check_db()
 
-    temp_list = dict()  # для отправки в функцию отправления сообщения
-    count_dict = dict()  # для хранения количества уникальных id
+    res = {}
 
-    # TODO: нужно отсортировать result по id, чтобы потом передавать в функцию, которая
-    # TODO: составляет текст вида: "Ваши дела: 1. .. 2. .. 3. .. Бессрочные: ...
+    for i in result:
+        if i['id'] not in res:
+            res[i['id']] = []
+        new_data = i.copy()
+        new_data.pop('id')
+        res[i['id']].append(new_data)
 
-    if result:
-        sorted_list = sorted(result, key=itemgetter("id"))  # сортировать по id
-        r = groupby(sorted(sorted_list, key=lambda x: x['id']), lambda x: x['id'])  # для подсчета кол-ва id
-        for i in range(len(result)):
-            print(f"sorted_list[{i}] = {sorted_list[i]}")
-        for k, g in r:
-            count_dict[k] = len(list(g))
-        keys = list(count_dict.keys())
-
-        for key in keys:  # key = id
-            for j in range(len(sorted_list)):
-                if 'usual_records' in sorted_list[j].keys():
-                    temp_list[key] = {sorted_list[j]['usual_records']: {'date': sorted_list[j]['date'],
-                                                                        'time': sorted_list[j]['time']}}
-                elif 'endless_records' in sorted_list[j].keys():
-                    temp_list[key] = {sorted_list[j]['endless_records']: {'date': sorted_list[j]['date'],
-                                                                          'time': sorted_list[j]['time']}}
-                print("temp list = ", temp_list)
-
-
+    await make_message(res)
 
 
 def check_db():
@@ -75,10 +58,10 @@ def check_db():
 
     if records:
         for row in records:
-            result.append({'id': row[0], 'usual_records': row[2], 'time': row[4],
+            result.append({'id': row[0], 'record': row[2], 'time': row[4],
                            'date': row[1]})
 
-        cursor.close()
+            cursor.close()
 
         return result
     else:
@@ -86,15 +69,30 @@ def check_db():
         return None
 
 
-def make_message(**kwargs):
-    text = 'Доброе утро! Вот ваши дела на сегодня: '
+async def make_message(dict):
+    text = emoji.emojize(':sun: Доброе утро! Вот ваши дела на сегодня: \n'
+                         '                                   \n')
     text_2 = '              \n' \
              'Бессрочные дела:\n' \
              '                \n'
 
-    i = 1
+    j = 1
     k = 1
 
-    # if 'last' == True:
+    for id in dict:
+        sorted_list = sorted(dict[id], key=itemgetter("date", "time"))
+        for value in sorted_list:
+            if value['date'] == 'Бессрочно':
+                text_2 += f'{k}. {value["record"]}\n'
+                k += 1
+            else:
+                if value['time'] == 0:
+                    text += f'{j}. {value["record"]} - {value["date"]}\n'
+                    j += 1
+                else:
+                    text += f'{j}. {value["record"]} - {value["date"]} {value["time"]}\n'
+                    j += 1
 
-    return text, text_2
+        print(f'id = {id}, msg = {text + text_2}')
+
+        await bot.send_message(id, text + text_2)
