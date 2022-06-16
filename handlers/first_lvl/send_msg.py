@@ -93,6 +93,4 @@ async def make_message(dict):
                     text += f'{j}. {value["record"]} - {value["date"]} {value["time"]}\n'
                     j += 1
 
-        print(f'id = {id}, msg = {text + text_2}')
-
         await bot.send_message(id, text + text_2)

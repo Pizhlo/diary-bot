@@ -25,8 +25,6 @@ async def list_of_doings(message: types.Message):
     cursor.execute('SELECT * FROM diary_db WHERE user=? and notification=?', (message.from_user.id, 0))
     records = cursor.fetchall()
 
-    print("records = ", records)
-
     if not records:
         await message.answer('У вас нет запланированных дел.')
         await message.answer('Хотите добавить дело?', reply_markup=add_doings_kb)
@@ -65,8 +63,6 @@ async def list_of_doings(message: types.Message):
                     else:
                         text += f'{j}. {value["record"]} - {value["date"]} {value["time"]}\n'
                         j += 1
-
-            print(f'id = {id}, msg = {text + text_2}')
 
         await message.answer('Вот ваши дела: ')
         # endless, text, text_2 = make_text(records)
@@ -133,14 +129,17 @@ async def today_doings(message: types.Message, state: FSMContext):
 async def process_simple_calendar(callback_query: CallbackQuery, callback_data: dict, state: FSMContext):
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     await bot.answer_callback_query(callback_query.id)
+    new_date = date.strftime('%d.%m.%Y')
+    print(f'new date = {new_date}')
     if selected:
-        if date < datetime.today():
+        if new_date < datetime.today().strftime('%d.%m.%Y'):
             await callback_query.message.answer(
                 'Вы выбрали дату, которая уже прошла. Пожалуйста, выберите другую дату:',
                 reply_markup=await SimpleCalendar().start_calendar()
             )
-        if date >= datetime.today():
-            Doings.date_text = date.strftime('%d.%m.%Y')
+        if new_date >= datetime.today().strftime('%d.%m.%Y'):
+            Doings.date_text = datetime.strptime(new_date, '%d.%m.%Y').date()
+            print("doings date text = ", Doings.date_text)
             await bot.send_message(callback_query.from_user.id, f'Вы выбрали: {date.strftime("%d.%m.%Y")}')
             await bot.send_message(callback_query.from_user.id, 'Хотите добавить время?', reply_markup=add_time_kb)
 
