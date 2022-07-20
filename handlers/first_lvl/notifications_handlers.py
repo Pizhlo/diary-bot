@@ -1,4 +1,5 @@
 import emoji
+from operator import itemgetter
 from aiogram import types
 from aiogram_calendar import simple_cal_callback, SimpleCalendar
 import sqlite3
@@ -49,8 +50,32 @@ async def list_of_notif(message: types.Message):
         await message.answer('У вас нет напоминаний.')
         await message.answer('Хотите создать напоминание?', reply_markup=add_notif_kb)
     else:
+        result = list({})
+        endless = False
+        text = ''
+        text_2 = '              \n' \
+                 'Бессрочные дела:\n' \
+                 '                \n'
+        j = 1
+        for row in records:
+            result.append({'id': row[0], 'record': row[2], 'time': row[4],
+                           'date': row[1]})
+        res = {}
+
+        for i in result:
+            if i['id'] not in res:
+                res[i['id']] = []
+            new_data = i.copy()
+            new_data.pop('id')
+            res[i['id']].append(new_data)
+
+        for id in res:
+            sorted_list = sorted(res[id], key=itemgetter("date", "time"))
+            for value in sorted_list:
+                text += f'{j}. {value["record"]} - {value["date"]} {value["time"]}\n'
+                j += 1
+
         await message.answer('Вот ваши напоминания: ')
-        text = make_text(records)
         await message.answer(text, reply_markup=edit_kb)
     cursor.close()
 
@@ -107,7 +132,6 @@ async def everyday_notif(message: types.Message):
 async def dont_make_record(callback_query: CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
-    await callback_query.message.answer(emoji.emojize(':check_mark_button: ОК'))
     await MainStates.first_pg.set()
 
 
@@ -116,21 +140,34 @@ async def notif_calender(callback_query: CallbackQuery, callback_data: dict):
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     await bot.answer_callback_query(callback_query.id)
     if selected:
-        if date < datetime.today():
+        if date.date() < datetime.today().date():
             await callback_query.message.answer(
                 'Вы выбрали дату, которая уже прошла. Пожалуйста, выберите другую дату:',
                 reply_markup=await SimpleCalendar().start_calendar()
             )
-        if date >= datetime.today():
+        if date.date() >= datetime.today().date():
             Notifications.date_text = date.strftime('%d.%m.%Y')
             await bot.send_message(callback_query.from_user.id, f'Вы выбрали: {date.strftime("%d.%m.%Y")}')
-            await bot.send_message(callback_query.from_user.id, 'Напишите время, когда нужно присылать вам напоминания')
+            await bot.send_message(callback_query.from_user.id,
+                                   'Напишите время, когда нужно присылать вам напоминания (в формате Ч:М)')
             await Notifications.time.set()
 
 
 # @dp.message_handler(state = Notifications.time)
 async def get_time(message: types.Message, state: FSMContext):
-    Notifications.time_text = message.text
+    date = datetime.strptime(Notifications.date_text, '%d.%m.%Y')
+    print(Notifications.time_text)
+
+    time_user = datetime.strptime(Notifications.time_text, '%I:%M')
+    time_now = datetime.strptime(datetime.today().time().strftime('%H:%M'), '%H:%M')
+
+    if date == datetime.today().date():
+        if time_user < time_now:
+            await message.answer('Вы ввели время, которое уже прошло. Пожалуйста, выберите другое время:')
+        else:
+            Notifications.time_text = message.text
+    else:
+        Notifications.time_text = message.text
     await acception(message, state)
 
 

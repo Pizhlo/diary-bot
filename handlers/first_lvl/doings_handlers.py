@@ -90,7 +90,7 @@ async def add_new_doing(message: types.Message):
 async def dont_make_record(callback_query: CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
-    await callback_query.message.answer(emoji.emojize(':check_mark_button: ОК'))
+    await MainStates.first_pg.set()
 
 
 # @dp.message_handler(state = Doings.record)
@@ -99,8 +99,6 @@ async def get_date(message: types.Message):
     await message.answer('Выберите дату, когда Вам нужно сделать дело (если это бессрочно, '
                          'просто напишите мне "бессрочно", если сегодня - напишите "сегодня"): ',
                          reply_markup=await SimpleCalendar().start_calendar())
-    # await message.answer('Выберите дату, когда Вам нужно сделать дело (если это бессрочно, '
-    # 'просто напишите мне "бессрочно"):')
     await Doings.date.set()
 
 
@@ -126,20 +124,17 @@ async def today_doings(message: types.Message, state: FSMContext):
 
 
 # @dp.callback_query_handler(simple_cal_callback.filter())
-async def process_simple_calendar(callback_query: CallbackQuery, callback_data: dict, state: FSMContext):
+async def process_simple_calendar(callback_query: CallbackQuery, callback_data: dict):
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     await bot.answer_callback_query(callback_query.id)
-    new_date = date.strftime('%d.%m.%Y')
-    print(f'new date = {new_date}')
     if selected:
-        if new_date < datetime.today().strftime('%d.%m.%Y'):
+        if date.date() < datetime.today().date():
             await callback_query.message.answer(
                 'Вы выбрали дату, которая уже прошла. Пожалуйста, выберите другую дату:',
                 reply_markup=await SimpleCalendar().start_calendar()
             )
-        if new_date >= datetime.today().strftime('%d.%m.%Y'):
-            Doings.date_text = datetime.strptime(new_date, '%d.%m.%Y').date()
-            print("doings date text = ", Doings.date_text)
+        if date.date() >= datetime.today().date():
+            Doings.date_text = date.strftime("%d.%m.%Y")
             await bot.send_message(callback_query.from_user.id, f'Вы выбрали: {date.strftime("%d.%m.%Y")}')
             await bot.send_message(callback_query.from_user.id, 'Хотите добавить время?', reply_markup=add_time_kb)
 
