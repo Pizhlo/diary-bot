@@ -10,6 +10,7 @@ from aiogram.dispatcher import FSMContext
 from keyboards.first_lvl.notifications_kb import add_notif_kb, edit_kb, acception_kb, dell_all_kb
 from aiogram.types import CallbackQuery
 from datetime import datetime, timedelta
+import time
 from aiogram.utils.markdown import text, bold
 from aiogram.types import ParseMode
 from aiogram.dispatcher.filters import Text
@@ -108,7 +109,7 @@ async def get_date(message: types.Message):
     Notifications.record_text = message.text
     await message.answer(
         'Выберите дату, когда Вам нужно напомнить (если каждый день, '
-        'просто напишите мне "ежедневно", если сегодня - напишите "сегодня"): ',
+        'просто напишите мне "ежедневно"): ',
         reply_markup=await SimpleCalendar().start_calendar())
     await Notifications.date.set()
 
@@ -149,26 +150,26 @@ async def notif_calender(callback_query: CallbackQuery, callback_data: dict):
             Notifications.date_text = date.strftime('%d.%m.%Y')
             await bot.send_message(callback_query.from_user.id, f'Вы выбрали: {date.strftime("%d.%m.%Y")}')
             await bot.send_message(callback_query.from_user.id,
-                                   'Напишите время, когда нужно присылать вам напоминания (в формате Ч:М)')
+                                   'Напишите время, когда нужно присылать вам напоминания (в формате ЧЧ:ММ)')
             await Notifications.time.set()
 
 
 # @dp.message_handler(state = Notifications.time)
 async def get_time(message: types.Message, state: FSMContext):
     date = datetime.strptime(Notifications.date_text, '%d.%m.%Y')
-    print(Notifications.time_text)
 
-    time_user = datetime.strptime(Notifications.time_text, '%I:%M')
-    time_now = datetime.strptime(datetime.today().time().strftime('%H:%M'), '%H:%M')
+    time_user = time.strptime(message.text, '%H:%M')
+    time_now = time.strptime(datetime.today().time().strftime('%H:%M'), '%H:%M')
 
-    if date == datetime.today().date():
+    if date.date() == datetime.today().date():
         if time_user < time_now:
             await message.answer('Вы ввели время, которое уже прошло. Пожалуйста, выберите другое время:')
         else:
             Notifications.time_text = message.text
+            await acception(message, state)
     else:
         Notifications.time_text = message.text
-    await acception(message, state)
+        await acception(message, state)
 
 
 # @dp.message_handler(state = Notifications.date)

@@ -22,8 +22,11 @@ class Doings(StatesGroup):
     number_doing = State()
     acception = State()
 
+    editing = State()
+
     edit_date = State()
     edit_record = State()
+    edit_time = State()
 
     send_mrng_msg = State()
 

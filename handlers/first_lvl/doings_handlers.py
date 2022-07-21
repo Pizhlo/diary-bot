@@ -1,5 +1,7 @@
 from operator import itemgetter
 import emoji
+import time
+from aiogram.types import InlineKeyboardButton
 from aiogram import types
 from aiogram_calendar import simple_cal_callback, SimpleCalendar
 import sqlite3
@@ -65,7 +67,6 @@ async def list_of_doings(message: types.Message):
                         j += 1
 
         await message.answer('Вот ваши дела: ')
-        # endless, text, text_2 = make_text(records)
         if endless:
             await message.answer(text + text_2, reply_markup=edit_kb)
         else:
@@ -117,7 +118,7 @@ async def endless_doings(message: types.Message, state: FSMContext):
 
 
 # @dp.message_handler(Text(equals='сегодня', ignore_case=True))
-async def today_doings(message: types.Message, state: FSMContext):
+async def today_doings(message: types.Message):
     Doings.date_text = datetime.today().date().strftime('%d.%m.%Y')
     await message.answer(f'Вы выбрали: {Doings.date_text}')
     await message.answer('Хотите добавить время?', reply_markup=add_time_kb)
@@ -149,9 +150,20 @@ async def add_time(callback_query: CallbackQuery):
 
 # @dp.message_handler(state = Doings.time)
 async def get_time(message: types.Message, state: FSMContext):
-    Doings.time_text = message.text
-    await Doings.acception.set()
-    await acception(message, state)
+    date = datetime.strptime(Doings.date_text, '%d.%m.%Y')
+
+    time_user = time.strptime(message.text, '%H:%M')
+    time_now = time.strptime(datetime.today().time().strftime('%H:%M'), '%H:%M')
+
+    if date.date() == datetime.today().date():
+        if time_user < time_now:
+            await message.answer('Вы ввели время, которое уже прошло. Пожалуйста, выберите другое время:')
+        else:
+            Doings.time_text = message.text
+            await acception(message, state)
+    else:
+        Doings.time_text = message.text
+        await acception(message, state)
 
 
 # @dp.callback_query_handler(text='dont_add_time')
@@ -392,21 +404,41 @@ async def accept_yes(callback_query: CallbackQuery):
 async def accept_no(callback_query: CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
+    if Doings.time_text:
+        change_time = InlineKeyboardButton('Время', callback_data='edit_time')
+        change_kb.row(change_time)
+    await Doings.editing.set()
     await callback_query.message.answer('Выберите, что нужно исправить:', reply_markup=change_kb)
 
 
-# @dp.callback_query_handler(text='time')
-async def change_time(callback_query: CallbackQuery):
+# @dp.callback_query_handler(text='date')
+async def change_date(callback_query: CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     await Doings.edit_date.set()
+    await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
     await callback_query.message.answer('Выберите дату, когда Вам нужно сделать дело: ',
                                         reply_markup=await SimpleCalendar().start_calendar())
 
 
-# dp.register_message_handler(state=Doings.edit_date)
-async def edit_time(message: types.Message, state: FSMContext):
-    await Doings.date.set()
-    await acception(message, state)
+# @dp.callback_query_handler(text='time')
+async def edit_time(callback_query: CallbackQuery, message: types.Message, state: FSMContext):
+    await bot.answer_callback_query(callback_query.id)
+    print('edit_time')
+    await Doings.edit_time.set()
+    date = datetime.strptime(Doings.date_text, '%d.%m.%Y')
+
+    time_user = time.strptime(message.text, '%H:%M')
+    time_now = time.strptime(datetime.today().time().strftime('%H:%M'), '%H:%M')
+
+    if date.date() == datetime.today().date():
+        if time_user < time_now:
+            await message.answer('Вы ввели время, которое уже прошло. Пожалуйста, выберите другое время:')
+        else:
+            Doings.time_text = message.text
+            await acception(message, state)
+    else:
+        Doings.time_text = message.text
+        await acception(message, state)
 
 
 # @dp.callback_query_handler(text='doing')
@@ -444,7 +476,7 @@ def doings_handlers_registration(dp):
     dp.register_callback_query_handler(add_time, text='add_time', state="*")
     dp.register_callback_query_handler(dont_add_time, text='dont_add_time', state="*")
 
-    dp.register_message_handler(edit_time, state=Doings.edit_date)
+    dp.callback_query_handler(edit_time, text='edit_time', state=Doings.editing)
     dp.register_message_handler(got_new_record, state=Doings.edit_record)
 
     dp.register_message_handler(get_date, state=Doings.record)
@@ -462,7 +494,8 @@ def doings_handlers_registration(dp):
     dp.register_callback_query_handler(accept_yes, text='accept', state="*")
     dp.register_callback_query_handler(accept_no, text='dont_accept', state="*")
 
-    dp.register_callback_query_handler(change_time, text='time', state="*")
+    dp.register_callback_query_handler(change_date, text='date', state="*")
     dp.register_callback_query_handler(change_record, text='doing', state="*")
 
     dp.register_callback_query_handler(process_simple_calendar, simple_cal_callback.filter(), state=Doings.date)
+    dp.register_callback_query_handler(process_simple_calendar, simple_cal_callback.filter(), state=Doings.edit_date)
